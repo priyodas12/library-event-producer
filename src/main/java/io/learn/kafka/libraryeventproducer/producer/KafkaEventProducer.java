@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.learn.kafka.libraryeventproducer.model.LibraryEvent;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -38,26 +39,32 @@ public class KafkaEventProducer {
     try {
       value = objectMapper.writeValueAsString(libraryEvent);
     } catch (JsonProcessingException e) {
-      onException(key);
+      onException(key, e.getMessage());
       return false;
     }
+    AtomicBoolean status = new AtomicBoolean(false);
 
     CompletableFuture<SendResult<UUID, String>> result = kafkaTemplate.send(topicName, key, value);
 
-    if (result.isCompletedExceptionally() || result.isCancelled()) {
-      onException(key);
-      return false;
-    }
-    onSuccess(key);
-    return true;
+    result.whenComplete((uuidStringSendResult, throwable) -> {
+      if (throwable != null) {
+        onException(key,throwable.getMessage());
+        status.set(false);
+      } else {
+        onSuccess(key,uuidStringSendResult);
+        status.set(true);
+      }
+    });
+    return status.get();
+
   }
 
-  private void onSuccess(UUID key) {
-    log.info("Message Id: {} Published to Topic: {}",key,topicName);
+  private void onSuccess(UUID key, SendResult<UUID, String> result) {
+    log.info("Message Id: {} Published to Topic: {} Partition: {} Offset: {}", key, topicName,result.getRecordMetadata().partition(),result.getRecordMetadata().offset());
   }
 
-  private void onException(UUID key) {
-    log.info("Error while publishing Message Id: {} to this Topic: {}",key,topicName);
+  private void onException(UUID key, String error) {
+    log.error("Error while publishing Message Id: {} to this Topic: {} error: {}", key, topicName,error);
   }
 
 }

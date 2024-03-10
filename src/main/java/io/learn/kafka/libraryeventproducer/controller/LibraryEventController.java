@@ -24,11 +24,13 @@ public class LibraryEventController {
   @PostMapping("/library-events")
   public ResponseEntity<LibraryEvent> getLibraryEvent(@RequestBody LibraryEvent libraryEvent) {
 
-    log.info("libraryEvent : {}", libraryEvent);
+    log.info("Before Publishing event: {}", libraryEvent);
 
     if (kafkaEventService.publishEvent(libraryEvent)) {
+      log.info("After Publishing event: {}", libraryEvent);
       return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(libraryEvent);
     }
+    log.info("After Publishing event: {}", libraryEvent);
     return
         ResponseEntity.status(HttpStatus.CREATED).body(libraryEvent);
   }
